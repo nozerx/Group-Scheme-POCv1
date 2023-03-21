@@ -2,15 +2,24 @@ package pubsub
 
 import (
 	"bufio"
+	"context"
 	"fmt"
 	"os"
 	"runtime"
 	"time"
+
+	strhandler "groupschemepoc1/streamhandler"
+
+	"github.com/libp2p/go-libp2p/core/host"
+	"github.com/libp2p/go-libp2p/core/peer"
 )
 
-var endoldsession bool
+const testProtocol = "test"
 
-func (gr *GroupRoom) HandleInputFromSDI() {
+var endoldsession bool
+var peerlist []ServicePeer
+
+func (gr *GroupRoom) HandleInputFromSDI(ctx context.Context, host host.Host) {
 	reader := bufio.NewReader(os.Stdin)
 	for {
 		input, err := reader.ReadString('\n')
@@ -20,7 +29,7 @@ func (gr *GroupRoom) HandleInputFromSDI() {
 		}
 		if input[:5] == "<cmd>" {
 			fmt.Println("These are the available commands")
-			fmt.Println("1.Change Group\n2.Change UserName\n3.List Group Peers")
+			fmt.Println("1.Change Group\n2.Change UserName\n3.List Group Peers\n4.List service peers\n5.Join Group")
 			var choice int
 			fmt.Scanln(&choice)
 			switch choice {
@@ -75,6 +84,77 @@ func (gr *GroupRoom) HandleInputFromSDI() {
 				fmt.Println("These are the list of peers in the Group " + gr.GroupName)
 				for _, peer := range gr.PeerList() {
 					fmt.Println(peer)
+				}
+				break
+			case 4:
+				fmt.Println("These are the list of your service peers currently active")
+				for _, peer := range gr.HostP2P.Host.Network().Peers() {
+					fmt.Println(peer)
+				}
+				break
+			case 5:
+				peerlist = nil
+				for id, peer := range gr.HostP2P.Host.Network().Peers() {
+					peerlist = append(peerlist, ServicePeer{Id: id, PeerId: peer})
+				}
+				for _, servicepeer := range peerlist {
+					fmt.Println(servicepeer)
+				}
+				var choice int
+				fmt.Scanln(&choice)
+				var grphostid peer.ID
+				for _, servicepeer := range peerlist {
+					if choice == servicepeer.Id {
+						grphostid = servicepeer.PeerId
+						break
+					}
+				}
+				fmt.Println("Enter the group name to request to join:")
+				groupName, err := reader.ReadString('\n')
+				escapeSeqLen := 0
+				if runtime.GOOS == "windows" {
+					escapeSeqLen = 2
+				} else {
+					escapeSeqLen = 1
+				}
+				groupName = groupName[0 : len(groupName)-escapeSeqLen]
+				if err != nil {
+					fmt.Println("Error during reading the group name")
+					continue
+				}
+				fmt.Println("Tryin to enter the group [" + groupName + "]")
+				fmt.Println("Enter the message to the group host :")
+				message, err := reader.ReadString('\n')
+				message = message[0 : len(message)-escapeSeqLen]
+				if err != nil {
+					fmt.Println("Error during reading the message for group request")
+					continue
+				}
+				strhandler.GroupJoinRequest(ctx, host, groupName, grphostid, message)
+				fmt.Println("Done with the group join request")
+				break
+			case 6:
+				peerlist = nil
+				for id, peer := range gr.HostP2P.Host.Network().Peers() {
+					peerlist = append(peerlist, ServicePeer{Id: id, PeerId: peer})
+				}
+				for _, servicepeer := range peerlist {
+					fmt.Println(servicepeer)
+				}
+				var choice int
+				fmt.Scanln(&choice)
+				var grphostid peer.ID
+				for _, servicepeer := range peerlist {
+					if choice == servicepeer.Id {
+						grphostid = servicepeer.PeerId
+						break
+					}
+				}
+				_, err = host.NewStream(ctx, grphostid, testProtocol)
+				if err != nil {
+					fmt.Println("[ERROR] - in establishing a test stream")
+				} else {
+					fmt.Println("[SUCCESS] - in establishing a test stream")
 				}
 				break
 			default:

@@ -2,7 +2,11 @@ module groupschemepoc1
 
 go 1.20
 
-require github.com/libp2p/go-libp2p v0.26.3
+require (
+	github.com/libp2p/go-libp2p v0.26.3
+	github.com/libp2p/go-libp2p-kad-dht v0.21.1
+	github.com/libp2p/go-libp2p-pubsub v0.9.3
+)
 
 require (
 	github.com/benbjohnson/clock v1.3.0 // indirect
@@ -46,9 +50,7 @@ require (
 	github.com/libp2p/go-cidranger v1.1.0 // indirect
 	github.com/libp2p/go-flow-metrics v0.1.0 // indirect
 	github.com/libp2p/go-libp2p-asn-util v0.2.0 // indirect
-	github.com/libp2p/go-libp2p-kad-dht v0.21.1 // indirect
 	github.com/libp2p/go-libp2p-kbucket v0.5.0 // indirect
-	github.com/libp2p/go-libp2p-pubsub v0.9.3 // indirect
 	github.com/libp2p/go-libp2p-record v0.2.0 // indirect
 	github.com/libp2p/go-msgio v0.3.0 // indirect
 	github.com/libp2p/go-nat v0.1.0 // indirect
