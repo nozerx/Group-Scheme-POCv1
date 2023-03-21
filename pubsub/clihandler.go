@@ -8,6 +8,8 @@ import (
 	"time"
 )
 
+var endoldsession bool
+
 func (gr *GroupRoom) HandleInputFromSDI() {
 	reader := bufio.NewReader(os.Stdin)
 	for {
@@ -87,10 +89,10 @@ func (gr *GroupRoom) HandleInputFromSDI() {
 				escapeSeqLen = 1
 			}
 			msg := input[0 : len(input)-escapeSeqLen]
-			fmt.Println("sending message to outbound queue")
+			// fmt.Println("sending message to outbound queue")
 			go func() {
 				gr.Outbound <- msg
-				fmt.Println("Message sent to outbound queue")
+				// fmt.Println("Message sent to outbound queue")
 			}()
 
 		}

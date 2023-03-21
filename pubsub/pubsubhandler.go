@@ -73,9 +73,9 @@ func JoinGroup(hostp2p *p2pnet.P2P, username string, groupname string) (*GroupRo
 		pstopic:   topic,
 		psub:      sub,
 	}
-	fmt.Println("Starting new subloop")
+	// fmt.Println("Starting new subloop")
 	go groupRoom.SubLoop()
-	fmt.Println("Starting new publoop")
+	// fmt.Println("Starting new publoop")
 	go groupRoom.PubLoop()
 
 	return groupRoom, nil
@@ -84,13 +84,13 @@ func JoinGroup(hostp2p *p2pnet.P2P, username string, groupname string) (*GroupRo
 
 func (gr *GroupRoom) PubLoop() {
 	for {
-		fmt.Println("publoop running")
+		// fmt.Println("publoop running")
 		select {
 		case <-gr.psctx.Done():
 			fmt.Println("PubLoop Exit")
 			return
 		case message := <-gr.Outbound:
-			fmt.Println("Outbound message is being processed")
+			// fmt.Println("Outbound message is being processed")
 			m := chatmessage{
 				Message:    message,
 				SenderID:   gr.selfId,
@@ -126,7 +126,7 @@ func (gr *GroupRoom) SubLoop() {
 			}
 
 			if message.ReceivedFrom == gr.selfId {
-				fmt.Println("Message from self identified")
+				// fmt.Println("Message from self identified")
 				continue
 			}
 
@@ -148,7 +148,7 @@ func (gr *GroupRoom) PeerList() []peer.ID {
 
 func (gr *GroupRoom) ExitRoom() {
 	defer gr.pscancel()
-
+	endoldsession = true
 	gr.psub.Cancel()
 	gr.pstopic.Close()
 }
