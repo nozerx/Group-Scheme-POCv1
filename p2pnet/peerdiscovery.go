@@ -19,7 +19,7 @@ func DiscoverPeers(ctx context.Context, host host.Host, kad_dht *dht.IpfsDHT, se
 		if err != nil {
 			fmt.Println("Error while finding peers with same service")
 		} else {
-			fmt.Println("Successfull in finding some peers")
+			// fmt.Println("Successfull in finding some peers")
 		}
 
 		for peerAddr := range peerChannel {

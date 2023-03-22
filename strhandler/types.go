@@ -1,8 +1,8 @@
-package streamhandler
+package strhandler
 
 import "github.com/libp2p/go-libp2p/core/peer"
 
-const GroupJoinRequestProtocol = "rex/group/member/join/request"
+const GroupJoinRequestProtocol = "/rex/request"
 
 type JoinRequest struct {
 	GroupName string
