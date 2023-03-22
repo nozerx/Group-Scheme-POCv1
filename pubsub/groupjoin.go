@@ -1,13 +1,15 @@
-package strhandler
+package pubsub
 
 import (
 	"bufio"
 	"context"
 	"encoding/json"
 	"fmt"
+	"groupschemepoc1/group"
 	"io"
 	"os"
 	"runtime"
+	"time"
 
 	"github.com/libp2p/go-libp2p/core/host"
 	"github.com/libp2p/go-libp2p/core/network"
@@ -46,6 +48,27 @@ func (jr *JoinRequest) handleJoinRequest(from peer.ID) {
 	switch choice {
 	case "<y>":
 		fmt.Println("You chose to accept the incoming group joining request")
+		joinrequestreply := &JoinRequestReply{
+			GroupName: jr.GroupName,
+			Host:      jr.Host,
+			To:        from,
+			Message:   jr.Message,
+			Granted:   true,
+			Key:       *group.CurrentGroupShareKey,
+		}
+		jrrbytes, err := json.Marshal(joinrequestreply)
+		if err != nil {
+			fmt.Println("[ERROR - during marshalling the group share key]")
+		}
+
+		str, err := group.MentorInfoObj.Host.NewStream(*group.MentorInfoObj.MentCTX, from, GroupJoinReplyProtocol)
+		if err != nil {
+			fmt.Println("[ERROR] - during establishing a stream to " + from.Pretty())
+		}
+		fmt.Println("[SUCCESS] - in establishing a stream to " + from.Pretty())
+		str.Write(jrrbytes)
+		fmt.Println("[DONE] - in sending the group key bytes")
+		str.Close()
 		break
 	default:
 		fmt.Println("You chose to reject the incoming group joinig request")
@@ -129,4 +152,50 @@ func Test(str network.Stream) {
 	rw := bufio.NewReadWriter(bufio.NewReader(str), bufio.NewWriter(str))
 
 	go fmt.Print(rw.ReadByte())
+}
+
+func RecieveReply(str network.Stream) {
+	buff = nil
+	fmt.Println("Response recieved")
+	streamReader := bufio.NewReader(str)
+	buffer := make([]byte, 1)
+	for {
+		_, err := streamReader.Read(buffer)
+		if err != nil {
+			if err == io.EOF {
+				fmt.Println("Fully Recieved")
+				break
+			}
+			fmt.Println("[ERROR] - during reading from the input stream")
+			fmt.Println(err.Error())
+			fmt.Println("[ABORT] - handling join response")
+			return
+		}
+		buff = append(buff, buffer...)
+
+	}
+	fmt.Println("Exited the loop")
+	joinrequestreply := &JoinRequestReply{}
+	err := json.Unmarshal(buff, joinrequestreply)
+	if err != nil {
+		fmt.Println("[ERROR] - during unmarhsalling join request reply recieved")
+		fmt.Println(buff)
+	}
+	fmt.Println(joinrequestreply.Key.GroupName)
+	fmt.Println(joinrequestreply.Granted)
+	oldgrouproom := CurrentGroupRoom
+	oldgrouproom.ExitRoom()
+	newgrouproom, err := JoinGroup(CurrentGroupRoom.HostP2P, CurrentGroupRoom.UserName, joinrequestreply.Key.GenerateGroupKey())
+	CurrentGroupRoom = newgrouproom
+	if err != nil {
+		fmt.Println("Error while joining the new group")
+	}
+	fmt.Print("Waiting for queues to adapt")
+	time.Sleep(1 * time.Second)
+	fmt.Print(".")
+	time.Sleep(1 * time.Second)
+	fmt.Print(".")
+	time.Sleep(1 * time.Second)
+	fmt.Print(".")
+
 }

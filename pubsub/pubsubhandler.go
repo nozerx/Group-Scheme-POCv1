@@ -27,7 +27,7 @@ type GroupRoom struct {
 	Inbound   chan chatmessage
 	Outbound  chan string
 
-	selfId   peer.ID
+	SelfId   peer.ID
 	psctx    context.Context
 	pscancel context.CancelFunc
 	pstopic  *pbsb.Topic
@@ -67,7 +67,7 @@ func JoinGroup(hostp2p *p2pnet.P2P, username string, groupname string) (*GroupRo
 		UserName:  username,
 		Inbound:   make(chan chatmessage),
 		Outbound:  make(chan string),
-		selfId:    hostp2p.Host.ID(),
+		SelfId:    hostp2p.Host.ID(),
 		psctx:     pubSubCtx,
 		pscancel:  cancel,
 		pstopic:   topic,
@@ -93,7 +93,7 @@ func (gr *GroupRoom) PubLoop() {
 			// fmt.Println("Outbound message is being processed")
 			m := chatmessage{
 				Message:    message,
-				SenderID:   gr.selfId,
+				SenderID:   gr.SelfId,
 				SenderName: gr.UserName,
 			}
 			messagebytes, err := json.Marshal(m)
@@ -125,7 +125,7 @@ func (gr *GroupRoom) SubLoop() {
 				return
 			}
 
-			if message.ReceivedFrom == gr.selfId {
+			if message.ReceivedFrom == gr.SelfId {
 				// fmt.Println("Message from self identified")
 				continue
 			}

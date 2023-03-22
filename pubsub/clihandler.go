@@ -8,7 +8,7 @@ import (
 	"runtime"
 	"time"
 
-	"groupschemepoc1/strhandler"
+	"groupschemepoc1/group"
 
 	"github.com/libp2p/go-libp2p/core/host"
 	"github.com/libp2p/go-libp2p/core/peer"
@@ -16,13 +16,15 @@ import (
 
 const testProtocol = "test"
 
+var CurrentGroupRoom *GroupRoom
 var endoldsession bool
 var peerlist []ServicePeer
 
 func (gr *GroupRoom) HandleInputFromSDI(ctx context.Context, host host.Host) {
 	reader := bufio.NewReader(os.Stdin)
 	for {
-		if strhandler.PauseCLI == false {
+		if PauseCLI == false {
+			gr = CurrentGroupRoom
 			input, err := reader.ReadString('\n')
 			if err != nil {
 				fmt.Println("Error during reading input from the stream")
@@ -35,6 +37,11 @@ func (gr *GroupRoom) HandleInputFromSDI(ctx context.Context, host host.Host) {
 				fmt.Scanln(&choice)
 				switch choice {
 				case 1:
+					group.MentorInfoObj = &group.MentorInfo{
+						PeerId:  gr.SelfId,
+						Host:    gr.HostP2P.Host,
+						MentCTX: &ctx,
+					}
 					fmt.Println("Enter the new group name to join it")
 					groupName, err := reader.ReadString('\n')
 					if err != nil {
@@ -48,10 +55,18 @@ func (gr *GroupRoom) HandleInputFromSDI(ctx context.Context, host host.Host) {
 						escapeSeqLen = 1
 					}
 					groupName = groupName[0 : len(groupName)-escapeSeqLen]
+					groupkey := group.GroupKeyShare{
+						GroupName: groupName,
+						Host:      gr.SelfId,
+						Key:       "xxx",
+					}
+					group.CurrentGroupShareKey = &groupkey
+					grouptopickey := groupkey.GenerateGroupKey()
 					oldGroupRoom := gr
 					oldGroupRoom.ExitRoom()
 					time.Sleep(2 * time.Second)
-					newGroupRoom, err := JoinGroup(gr.HostP2P, gr.UserName, groupName)
+					newGroupRoom, err := JoinGroup(gr.HostP2P, gr.UserName, grouptopickey)
+					CurrentGroupRoom = newGroupRoom
 					if err != nil {
 						fmt.Println("Error while joining the new group")
 						continue
@@ -131,7 +146,7 @@ func (gr *GroupRoom) HandleInputFromSDI(ctx context.Context, host host.Host) {
 						fmt.Println("Error during reading the message for group request")
 						continue
 					}
-					strhandler.GroupJoinRequest(ctx, host, groupName, grphostid, message)
+					GroupJoinRequest(ctx, host, groupName, grphostid, message)
 					fmt.Println("Done with the group join request")
 					break
 				case 6:
