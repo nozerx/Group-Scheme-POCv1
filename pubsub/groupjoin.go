@@ -24,6 +24,11 @@ var PauseCLI bool = false
 // needs to be solved
 func (jr *JoinRequest) handleJoinRequest(from peer.ID) {
 	fmt.Println("Join request being processed")
+	if group.CurrentGroupShareKey.GroupName != jr.GroupName {
+		fmt.Println("You are not part of the specified group")
+		fmt.Println("[ABORT] - Join request aborted")
+		return
+	}
 	fmt.Println("------------------------------------------")
 	fmt.Println("FROM : " + from.Pretty())
 	fmt.Println("GROUP : " + jr.GroupName)
