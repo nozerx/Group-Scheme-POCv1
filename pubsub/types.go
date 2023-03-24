@@ -34,3 +34,8 @@ type JoinRequestReply struct {
 	Granted   bool
 	Key       group.GroupKeyShare
 }
+
+type GroupPeer struct {
+	PeerId   peer.ID
+	UserName string
+}

@@ -3,6 +3,7 @@ package pubsub
 import (
 	"bufio"
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"runtime"
@@ -16,6 +17,10 @@ import (
 
 const testProtocol = "test"
 
+var resetactivetable bool = false
+var PeerTable []GroupPeer = nil
+
+var broadcastrecieved bool = false
 var CurrentGroupRoom *GroupRoom
 var endoldsession bool
 var peerlist []ServicePeer
@@ -32,7 +37,7 @@ func (gr *GroupRoom) HandleInputFromSDI(ctx context.Context, host host.Host) {
 			}
 			if input[:5] == "<cmd>" {
 				fmt.Println("These are the available commands")
-				fmt.Println("1.Change Group\n2.Change UserName\n3.List Group Peers\n4.List service peers\n5.Join Group")
+				fmt.Println("1.Change Group\n2.Change UserName\n3.List Group Peers\n4.List service peers\n5.Join Group\n7.Print PEER-TABLE")
 				var choice int
 				fmt.Scanln(&choice)
 				switch choice {
@@ -173,6 +178,10 @@ func (gr *GroupRoom) HandleInputFromSDI(ctx context.Context, host host.Host) {
 						fmt.Println("[SUCCESS] - in establishing a test stream")
 					}
 					break
+				case 7:
+					fmt.Println("************ACTIVEPEERTABLE*****************")
+					PrintPeerTable()
+					break
 				default:
 					fmt.Println("Bad command")
 
@@ -185,9 +194,23 @@ func (gr *GroupRoom) HandleInputFromSDI(ctx context.Context, host host.Host) {
 					escapeSeqLen = 1
 				}
 				msg := input[0 : len(input)-escapeSeqLen]
+				chatmsg := &chatmessage{
+					Message:    msg,
+					SenderID:   gr.SelfId,
+					SenderName: gr.UserName,
+				}
+				chatbytes, err := json.Marshal(chatmsg)
+				if err != nil {
+					fmt.Println("[ERROR] - during marhsalling chat message")
+					continue
+				}
+				msgpacket := &packet{
+					PacketType: "<chat>",
+					Content:    chatbytes,
+				}
 				// fmt.Println("sending message to outbound queue")
 				go func() {
-					gr.Outbound <- msg
+					gr.Outbound <- *msgpacket
 					// fmt.Println("Message sent to outbound queue")
 				}()
 
@@ -198,15 +221,75 @@ func (gr *GroupRoom) HandleInputFromSDI(ctx context.Context, host host.Host) {
 
 func (gr *GroupRoom) DisplayMessage() {
 	fmt.Println("Starting DisplayMessage Loop")
-	for msg := range gr.Inbound {
-		select {
-		case <-gr.psctx.Done():
-			fmt.Println("Exiting DisplayMessage Loop")
+	for inpacket := range gr.Inbound {
+		switch gr.State {
+		case 0:
+			fmt.Println("Exiting DisplayMessage Loop for " + gr.GroupName)
 			return
 		default:
-			fmt.Println("--------------------------------------------------")
-			fmt.Printf("%s: %s\n", msg.SenderName, msg.Message)
-			fmt.Println("--------------------------------------------------")
+			switch inpacket.PacketType {
+			case "<chat>":
+				chatmsg := &chatmessage{}
+				err := json.Unmarshal(inpacket.Content, chatmsg)
+				if err != nil {
+					fmt.Println("[ERROR] - during unmarshalling chat message")
+				} else {
+					fmt.Println("--------------------------------------------------")
+					fmt.Printf("%s: %s\n", chatmsg.SenderName, chatmsg.Message)
+					fmt.Println("--------------------------------------------------")
+				}
+				break
+			case "<brd>":
+				brdmsg := &BroadCastMessage{}
+				err := json.Unmarshal(inpacket.Content, brdmsg)
+				if err != nil {
+					fmt.Println("[ERROR] - during unmarshalling broadcast message")
+				} else {
+					broadcastrecieved = true
+					fmt.Println("BroadCast recieved")
+					fmt.Println("**************************************************")
+					fmt.Printf("[ANNOUNCE UR SELF <brd>]: %s\n", brdmsg.PeerId.Pretty())
+					fmt.Println("**************************************************")
+					ResetPeerTable()
+					go gr.BroadCastReplyHandler()
+				}
+				break
+			case "<brdreply>":
+				brdreplymsg := &BroadCastReplyMessage{}
+				err := json.Unmarshal(inpacket.Content, brdreplymsg)
+				brdreplymsg.ADDToPeerTable()
+				if err != nil {
+					fmt.Println("[ERROR] - during unmarshalling broadcast reply message")
+				} else {
+					fmt.Println("++++++++++++++++++++++++++++++++++++++++++++++++++")
+					fmt.Printf("[I AM ACTIVE]: %s\n", brdreplymsg.PeerId.Pretty())
+					fmt.Println("++++++++++++++++++++++++++++++++++++++++++++++++++")
+				}
+				break
+			default:
+				fmt.Println("[PANIC] - Unkown packet type recieved")
+			}
+
 		}
 	}
+}
+
+func (brdreply *BroadCastReplyMessage) ADDToPeerTable() {
+	groupPeer := &GroupPeer{
+		PeerId:   brdreply.PeerId,
+		UserName: "Test",
+	}
+	PeerTable = append(PeerTable, *groupPeer)
+}
+
+func ResetPeerTable() {
+	PeerTable = nil
+}
+
+func PrintPeerTable() {
+	fmt.Println("============================================")
+	for _, activePeer := range PeerTable {
+		fmt.Println(activePeer.PeerId.Pretty(), activePeer.UserName)
+	}
+	fmt.Println("============================================")
 }

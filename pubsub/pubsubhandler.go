@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"groupschemepoc1/p2pnet"
+	"math/rand"
+	"time"
 
 	pbsb "github.com/libp2p/go-libp2p-pubsub"
 	"github.com/libp2p/go-libp2p/core/host"
@@ -20,18 +22,35 @@ type chatmessage struct {
 	SenderName string
 }
 
+// Packet type can be the following
+// <brd> - broadcast
+// <brdreply> - broadcastreply
+// <chat> - chat message
+type packet struct {
+	PacketType string
+	Content    []byte
+}
+
+type BroadCastMessage struct {
+	PeerId peer.ID
+}
+
+type BroadCastReplyMessage struct {
+	PeerId peer.ID
+}
+
 type GroupRoom struct {
 	HostP2P   *p2pnet.P2P
 	GroupName string
 	UserName  string
-	Inbound   chan chatmessage
-	Outbound  chan string
-
-	SelfId   peer.ID
-	psctx    context.Context
-	pscancel context.CancelFunc
-	pstopic  *pbsb.Topic
-	psub     *pbsb.Subscription
+	Inbound   chan packet
+	Outbound  chan packet
+	State     int // 1= active and 0- dead
+	SelfId    peer.ID
+	psctx     context.Context
+	pscancel  context.CancelFunc
+	pstopic   *pbsb.Topic
+	psub      *pbsb.Subscription
 }
 
 func SetUpPubSub(ctx context.Context, host host.Host) *pbsb.PubSub {
@@ -65,10 +84,11 @@ func JoinGroup(hostp2p *p2pnet.P2P, username string, groupname string) (*GroupRo
 		HostP2P:   hostp2p,
 		GroupName: groupname,
 		UserName:  username,
-		Inbound:   make(chan chatmessage),
-		Outbound:  make(chan string),
+		Inbound:   make(chan packet),
+		Outbound:  make(chan packet),
 		SelfId:    hostp2p.Host.ID(),
 		psctx:     pubSubCtx,
+		State:     1,
 		pscancel:  cancel,
 		pstopic:   topic,
 		psub:      sub,
@@ -77,7 +97,8 @@ func JoinGroup(hostp2p *p2pnet.P2P, username string, groupname string) (*GroupRo
 	go groupRoom.SubLoop()
 	// fmt.Println("Starting new publoop")
 	go groupRoom.PubLoop()
-
+	fmt.Println("Started the broadcast handler for " + groupRoom.GroupName)
+	go groupRoom.BroadCastHandler()
 	return groupRoom, nil
 
 }
@@ -89,22 +110,18 @@ func (gr *GroupRoom) PubLoop() {
 		case <-gr.psctx.Done():
 			fmt.Println("PubLoop Exit")
 			return
-		case message := <-gr.Outbound:
+		case outpacket := <-gr.Outbound:
 			// fmt.Println("Outbound message is being processed")
-			m := chatmessage{
-				Message:    message,
-				SenderID:   gr.SelfId,
-				SenderName: gr.UserName,
-			}
-			messagebytes, err := json.Marshal(m)
+
+			packetbytes, err := json.Marshal(outpacket)
 			if err != nil {
-				fmt.Println("Error during marshalling the message")
+				fmt.Println("[ERROR] - during marhsalling outgoing packet")
 				continue
 			}
 
-			err = gr.pstopic.Publish(gr.psctx, messagebytes)
+			err = gr.pstopic.Publish(gr.psctx, packetbytes)
 			if err != nil {
-				fmt.Println("Error during publishing the message to group")
+				fmt.Println("[ERROR] - during publishing the packet to group")
 				continue
 			}
 		}
@@ -125,19 +142,19 @@ func (gr *GroupRoom) SubLoop() {
 				return
 			}
 
-			if message.ReceivedFrom == gr.SelfId {
-				// fmt.Println("Message from self identified")
-				continue
-			}
+			inpacket := &packet{}
 
-			cm := &chatmessage{}
-
-			err = json.Unmarshal(message.Data, cm)
+			err = json.Unmarshal(message.Data, inpacket)
 			if err != nil {
 				fmt.Println("Error while unmarshalling the messages")
 			}
+			if message.ReceivedFrom == gr.SelfId {
+				if inpacket.PacketType == "<chat>" {
+					continue
+				}
+			}
 
-			gr.Inbound <- *cm
+			gr.Inbound <- *inpacket
 		}
 	}
 }
@@ -149,10 +166,62 @@ func (gr *GroupRoom) PeerList() []peer.ID {
 func (gr *GroupRoom) ExitRoom() {
 	defer gr.pscancel()
 	endoldsession = true
+	gr.State = 0
 	gr.psub.Cancel()
 	gr.pstopic.Close()
 }
 
 func (gr *GroupRoom) UpdateUserName(username string) {
 	gr.UserName = username
+}
+
+func (gr *GroupRoom) BroadCastHandler() {
+	waittime := (rand.Intn(60-20) + 20)
+	fmt.Println("Broadcast wait time for this node is", waittime)
+	for i := 0; i <= waittime; i++ {
+		time.Sleep(1 * time.Second)
+		if i == waittime {
+			if broadcastrecieved {
+				broadcastrecieved = false
+				go gr.BroadCastHandler()
+				return
+			}
+			if gr.State == 0 {
+				fmt.Println("Ending BroadCast handler for " + gr.GroupName)
+				return
+			}
+			broadCastMessage := &BroadCastMessage{
+				PeerId: gr.SelfId,
+			}
+			brdbytes, err := json.Marshal(broadCastMessage)
+			if err != nil {
+				fmt.Println("[ERROR] - during marshalling broadcast message")
+				continue
+			}
+			brdpacket := &packet{
+				PacketType: "<brd>",
+				Content:    brdbytes,
+			}
+			gr.Outbound <- *brdpacket
+			go gr.BroadCastHandler()
+		}
+
+	}
+}
+
+func (gr *GroupRoom) BroadCastReplyHandler() {
+	brdreplypacket := &BroadCastReplyMessage{
+		PeerId: gr.SelfId,
+	}
+	brdreplybytes, err := json.Marshal(brdreplypacket)
+	if err != nil {
+		fmt.Println("[ERROR] - during marshalling broadcast reply")
+		return
+	}
+	outpacket := &packet{
+		PacketType: "<brdreply>",
+		Content:    brdreplybytes,
+	}
+	gr.Outbound <- *outpacket
+
 }
